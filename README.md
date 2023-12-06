@@ -1,6 +1,7 @@
 # baitu-specs
 
-BaitTu-iOS CocoaPods specs.
+BaitTu-iOS CocoaPods specs. 
+
 BaitTu-iOS CocoaPods 仓库。
 
 ## Usage
