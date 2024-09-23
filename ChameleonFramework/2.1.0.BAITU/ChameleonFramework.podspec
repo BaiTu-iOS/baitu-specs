@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.social_media_url       = "http://twitter.com/ViccsMind"
   s.platform             = :ios
   s.ios.deployment_target = '10.0'
-  s.source               = { :git => "https://github.com/BaiTu-iOS/Chameleon.git",
+  s.source               = { :git => "https://github.com/BaiTu-iOS/ChameleonFramework.git",
                              :tag => s.version.to_s }
 
   s.public_header_files = 'ChameleonFramework/Classes/Objective-C/**/*.h'
