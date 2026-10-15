@@ -1,0 +1,65 @@
+name: Sync verified ReerCodable specs
+
+on:
+  schedule:
+    - cron: '43 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-reer-codable
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download verified specifications
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp 'repos/BaiTu-iOS/ReerCodable/releases?per_page=100' > "$RUNNER_TEMP/reer-releases.json"
+          jq -r '.[][] | select(.draft == false and .prerelease == false) | select(.tag_name | test("^macros-v?[0-9]+\\.[0-9]+\\.[0-9]+-xcode-26\\.6-arm64-flex-r1$")) | select((.assets | map(.name) | index("ReerCodable.podspec.json")) != null) | select((.assets | map(.name) | index("ReerCodable.podspec.json.sha256")) != null) | .tag_name' "$RUNNER_TEMP/reer-releases.json" > "$RUNNER_TEMP/reer-tags.txt"
+          while IFS= read -r tag; do
+            version="${tag#macros-}"
+            version="${version%-xcode-26.6-arm64-flex-r1}"
+            version="${version#v}"
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            destination="ReerCodable/$version/ReerCodable.podspec.json"
+            download="$RUNNER_TEMP/reer-spec-$version"
+            mkdir -p "$download"
+            base="https://github.com/BaiTu-iOS/ReerCodable/releases/download/$tag"
+            for asset in ReerCodable.podspec.json ReerCodable.podspec.json.sha256; do
+              curl --fail --location --silent --show-error --retry 3 --max-time 120 "$base/$asset" -o "$download/$asset"
+            done
+            (cd "$download" && sha256sum -c ReerCodable.podspec.json.sha256)
+            jq -e --arg version "$version" '.name == "ReerCodable" and .version == $version and .source.git == "https://github.com/reers/ReerCodable.git" and (.source.commit | test("^[a-f0-9]{40}$"))' "$download/ReerCodable.podspec.json" >/dev/null
+            if [[ -f "$destination" ]]; then
+              cmp "$destination" "$download/ReerCodable.podspec.json"
+            else
+              mkdir -p "ReerCodable/$version"
+              cp "$download/ReerCodable.podspec.json" "$destination"
+            fi
+          done < "$RUNNER_TEMP/reer-tags.txt"
+      - name: Commit new versions
+        run: |
+          if [[ ! -d ReerCodable ]]; then
+            echo 'No verified specifications available yet.'
+            exit 0
+          fi
+          git add -- ReerCodable
+          if git diff --cached --quiet; then
+            echo 'Verified specifications are already up to date.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore: 同步已通过兼容测试的ReerCodable规格'
+          git push origin HEAD:main
