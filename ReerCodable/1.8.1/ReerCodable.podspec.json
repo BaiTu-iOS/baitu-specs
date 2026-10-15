@@ -1,0 +1,37 @@
+{
+  "name": "ReerCodable",
+  "version": "1.8.1",
+  "summary": "Codable macros with BaiTu prebuilt macro integration.",
+  "homepage": "https://github.com/BaiTu-iOS/ReerCodable",
+  "license": {
+    "type": "MIT",
+    "file": "LICENSE"
+  },
+  "authors": {
+    "Asura19": "x.rhythm@qq.com"
+  },
+  "source": {
+    "git": "https://github.com/reers/ReerCodable.git",
+    "commit": "cf8027e1a1d93f5fbfb3d8b692113e28fbfbe3a7"
+  },
+  "platforms": {
+    "ios": "15.0",
+    "osx": "12.0"
+  },
+  "swift_versions": "5.10",
+  "source_files": "Sources/ReerCodable/**/*.swift",
+  "pod_target_xcconfig": {
+    "OTHER_SWIFT_FLAGS": "$(inherited) -load-plugin-executable \"$(PODS_BUILD_DIR)/ReerCodable/1.8.1/$(XCODE_VERSION_ACTUAL)/ReerCodableMacros#ReerCodableMacros\""
+  },
+  "user_target_xcconfig": {
+    "OTHER_SWIFT_FLAGS": "$(inherited) -load-plugin-executable \"$(PODS_BUILD_DIR)/ReerCodable/1.8.1/$(XCODE_VERSION_ACTUAL)/ReerCodableMacros#ReerCodableMacros\""
+  },
+  "script_phases": {
+    "name": "Prepare ReerCodable macro",
+    "execution_position": "before_compile",
+    "shell_path": "/bin/bash",
+    "always_out_of_date": "1",
+    "script": "set -euo pipefail\ntrap 'echo \"error: ReerCodable macro preparation failed at line $LINENO (exit $?)\" >&2' ERR\nif [[ $(uname -m) != arm64 ]]; then\n  echo 'error: ReerCodable macros currently require an Apple Silicon Mac.' >&2\n  exit 1\nfi\nxcode_version=$(xcodebuild -version | awk 'NR == 1 {print $2}')\ncase \"$xcode_version\" in\n  26.4.1|26.5|26.6) producer=\"$xcode_version\" ;;\n  27.0) producer=26.6 ;; # Explicitly verified compatibility mapping.\n  *) echo \"error: No verified ReerCodable macro for Xcode $xcode_version\" >&2; exit 1 ;;\nesac\nplugin_dir=\"${PODS_BUILD_DIR}/ReerCodable/1.8.1/${XCODE_VERSION_ACTUAL}\"\nif [[ -x \"$plugin_dir/ReerCodableMacros\" ]]; then exit 0; fi\nmkdir -p \"$plugin_dir\"\ndownload_dir=$(mktemp -d \"$plugin_dir/download.XXXXXX\")\ntrap 'rm -rf \"$download_dir\"' EXIT\ntag=\"macros-1.8.1-xcode-$producer-arm64-flex-r1\"\nbase=\"https://github.com/BaiTu-iOS/ReerCodable/releases/download/$tag\"\nfor asset in ReerCodableMacros.tar.gz manifest.json SHA256SUMS; do\n  curl --fail --location --silent --show-error --retry 3 --connect-timeout 15 --max-time 180 \"$base/$asset\" -o \"$download_dir/$asset\"\ndone\ncd \"$download_dir\"\nshasum -a 256 -c SHA256SUMS\n[[ $(/usr/bin/plutil -extract release_tag raw -o - manifest.json) == \"$tag\" ]]\n[[ $(/usr/bin/plutil -extract architecture raw -o - manifest.json) == arm64 ]]\n[[ $(/usr/bin/plutil -extract auto_flexible_type raw -o - manifest.json) == true ]]\ntar -xzf ReerCodableMacros.tar.gz\n[[ $(lipo -archs ReerCodableMacros) == arm64 ]]\nchmod +x ReerCodableMacros\nmv ReerCodableMacros \"$plugin_dir/ReerCodableMacros\"\n"
+  },
+  "swift_version": "5.10"
+}
