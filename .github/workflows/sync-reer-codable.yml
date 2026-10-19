@@ -18,6 +18,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+      - name: Load the compatibility revision validator
+        uses: actions/checkout@v5
+        with:
+          repository: BaiTu-iOS/ReerCodable
+          ref: main
+          path: .reercodable
+          sparse-checkout: .github/scripts
+          persist-credentials: false
       - name: Download verified specifications
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,13 +49,13 @@ jobs:
             (cd "$download" && sha256sum -c ReerCodable.podspec.json.sha256)
             jq -e --arg version "$version" '.name == "ReerCodable" and .version == $version and .source.git == "https://github.com/reers/ReerCodable.git" and (.source.commit | test("^[a-f0-9]{40}$"))' "$download/ReerCodable.podspec.json" >/dev/null
             if [[ -f "$destination" ]]; then
-              cmp "$destination" "$download/ReerCodable.podspec.json"
+              ruby .reercodable/.github/scripts/spec-compatibility.rb "$destination" "$download/ReerCodable.podspec.json"
             else
               mkdir -p "ReerCodable/$version"
-              cp "$download/ReerCodable.podspec.json" "$destination"
             fi
+            cp "$download/ReerCodable.podspec.json" "$destination"
           done < "$RUNNER_TEMP/reer-tags.txt"
-      - name: Commit new versions
+      - name: Commit new versions and verified Xcode additions
         run: |
           if [[ ! -d ReerCodable ]]; then
             echo 'No verified specifications available yet.'
