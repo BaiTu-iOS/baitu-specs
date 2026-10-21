@@ -1,0 +1,61 @@
+# Created by yuxilong on 2026/10/21.
+name: Sync verified BTSwiftProtobuf specs
+on:
+  schedule:
+    - cron: '43 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sync-btswiftprotobuf
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download verified specifications
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp 'repos/BaiTu-iOS/swift-protobuf/releases?per_page=100' > "$RUNNER_TEMP/releases.json"
+          jq -r '.[][] | select(.draft == false and .prerelease == false)
+            | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+            | select((.assets | map(.name) | index("BTSwiftProtobuf.podspec.json")) != null)
+            | .tag_name' "$RUNNER_TEMP/releases.json" > "$RUNNER_TEMP/tags"
+          while IFS= read -r version; do
+            destination="BTSwiftProtobuf/$version/BTSwiftProtobuf.podspec.json"
+            download="$RUNNER_TEMP/spec-$version"
+            mkdir -p "$download"
+            gh release download "$version" --repo BaiTu-iOS/swift-protobuf --dir "$download" \
+              --pattern BTSwiftProtobuf.podspec.json --pattern BTSwiftProtobuf.podspec.json.sha256
+            (
+              cd "$download"
+              sha256sum -c BTSwiftProtobuf.podspec.json.sha256
+            )
+            jq -e --arg version "$version" '.name == "BTSwiftProtobuf"
+              and .module_name == "BTSwiftProtobuf" and .version == $version
+              and .source == {git: "https://github.com/BaiTu-iOS/swift-protobuf.git", tag: $version}' \
+              "$download/BTSwiftProtobuf.podspec.json" >/dev/null
+            if [[ -f "$destination" ]]; then
+              cmp "$destination" "$download/BTSwiftProtobuf.podspec.json"
+            else
+              mkdir -p "BTSwiftProtobuf/$version"
+              cp "$download/BTSwiftProtobuf.podspec.json" "$destination"
+            fi
+          done < "$RUNNER_TEMP/tags"
+      - name: Publish new versions
+        run: |
+          set -euo pipefail
+          if [[ ! -d BTSwiftProtobuf ]]; then exit 0; fi
+          git add -- BTSwiftProtobuf
+          if git diff --cached --quiet; then exit 0; fi
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore: 同步已验证的 BTSwiftProtobuf 版本'
+          git pull --rebase origin main
+          git push origin HEAD:main
