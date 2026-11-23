@@ -1,0 +1,64 @@
+# Created by yuxilong on 2026/11/23.
+name: Sync verified Spine Runtime specs
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-spine-runtime
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified specifications
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp 'repos/BaiTu-iOS/SpineRuntime/releases?per_page=100' > "$RUNNER_TEMP/spine-releases.json"
+          jq -r '.[][] | select(.draft == false and .prerelease == false)
+            | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+            | select((.assets | map(.name) | index("BTSpineRuntime.podspec.json")) != null)
+            | .tag_name' "$RUNNER_TEMP/spine-releases.json" > "$RUNNER_TEMP/spine-tags"
+          while IFS= read -r version; do
+            destination="BTSpineRuntime/$version/BTSpineRuntime.podspec.json"
+            download="$RUNNER_TEMP/spine-spec-$version"
+            mkdir -p "$download"
+            gh release download "$version" --repo BaiTu-iOS/SpineRuntime --dir "$download" \
+              --pattern BTSpineRuntime.podspec.json --pattern BTSpineRuntime.podspec.json.sha256
+            (cd "$download" && sha256sum -c BTSpineRuntime.podspec.json.sha256)
+            jq -e --arg version "$version" '.name == "BTSpineRuntime" and .version == $version
+              and .platforms.ios == "13.0"
+              and .source.http == ("https://github.com/BaiTu-iOS/SpineRuntime/releases/download/" + $version + "/SpineRuntime-" + $version + ".zip")
+              and (.source.sha256 | test("^[a-f0-9]{64}$"))
+              and .vendored_frameworks == ["Spine.xcframework", "SpineCppLite.xcframework", "SpineShadersStructs.xcframework"]' \
+              "$download/BTSpineRuntime.podspec.json" >/dev/null
+            if [[ -f "$destination" ]]; then
+              cmp "$destination" "$download/BTSpineRuntime.podspec.json"
+            else
+              mkdir -p "BTSpineRuntime/$version"
+              cp "$download/BTSpineRuntime.podspec.json" "$destination"
+            fi
+          done < "$RUNNER_TEMP/spine-tags"
+      - name: Publish new versions
+        run: |
+          set -euo pipefail
+          if [[ ! -d BTSpineRuntime ]]; then exit 0; fi
+          git add -- BTSpineRuntime
+          if git diff --cached --quiet; then exit 0; fi
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore: 同步已验证的 Spine Runtime 版本'
+          git pull --rebase origin main
+          git push origin HEAD:main
