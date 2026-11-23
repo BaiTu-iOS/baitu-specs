@@ -1,0 +1,31 @@
+{
+  "name": "BTSpineRuntime",
+  "version": "4.2.0",
+  "summary": "Spine 4.2 runtime with BaiTu renderer patches and precompiled Metal shaders.",
+  "homepage": "https://github.com/BaiTu-iOS/SpineRuntime",
+  "license": {
+    "type": "Spine Runtimes License Agreement",
+    "file": "LICENSE"
+  },
+  "authors": {
+    "BaiTu-iOS": "https://github.com/BaiTu-iOS"
+  },
+  "source": {
+    "http": "https://github.com/BaiTu-iOS/SpineRuntime/releases/download/4.2.0/SpineRuntime-4.2.0.zip",
+    "sha256": "db46fb082ba088bfde968ef309e1fd40b8e8371d03d56cd5fa579962f22d4edd"
+  },
+  "platforms": {
+    "ios": "13.0"
+  },
+  "vendored_frameworks": [
+    "Spine.xcframework",
+    "SpineCppLite.xcframework",
+    "SpineShadersStructs.xcframework"
+  ],
+  "frameworks": [
+    "Metal",
+    "MetalKit",
+    "UIKit"
+  ],
+  "libraries": "c++"
+}
